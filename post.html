@@ -7,9 +7,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/mdui/0.4.1/css/mdui.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mdui/0.4.1/js/mdui.min.js"></script>
+    <script type="module" src="https://unpkg.com/@portabletext/to-html@2.0.13/dist/to-html.mjs"></script> 
     
-    <script src="https://unpkg.com/@portabletext/to-html@2.0.11/dist/to-html.umd.min.js"></script>
-
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
     
     <style>
@@ -91,127 +90,105 @@
         </main>
     </div>
 
-<script>
-    // 使用 'load' 事件確保所有外部資源 (包括函式庫) 都已載入完成
-    window.addEventListener('load', function() {
+<script type="module">
+    // 直接從 URL 導入 toHtml 函式，不再需要 window
+    import { toHtml } from 'https://unpkg.com/@portabletext/to-html@2.0.13/dist/to-html.mjs';
+
+    document.getElementById('current-year').textContent = new Date().getFullYear();
+    
+    const SANITY_PROJECT_ID = '41rn0gbp'; 
+    const SANITY_DATASET = 'production';
+    const API_BASE_URL = `https://${SANITY_PROJECT_ID}.api.sanity.io/v2021-10-21/data/query/${SANITY_DATASET}`;
+    const container = document.getElementById('article-list-container');
+
+    async function fetchArticleList() {
+        const template = document.getElementById('article-card-template');
+        const listQuery = encodeURIComponent(`*[_type == "post"] | order(publishedAt desc) {title, "slug": slug.current, "imageUrl": mainImage.asset->url, publishedAt}`);
+        const listApiUrl = `${API_BASE_URL}?query=${listQuery}`;
         
-        document.getElementById('current-year').textContent = new Date().getFullYear();
-        
-        // 將變數宣告移到 load 事件內部，確保此時 window.PortableTextToHtml 肯定存在
-        const portableTextToHtml = window.PortableTextToHtml;
-
-        // ▼▼▼ 關鍵除錯碼 ▼▼▼
-        // 在主控台印出 portableTextToHtml 的實際值
-        console.log('PortableTextToHtml library object:', portableTextToHtml);
-        // 如果此刻它仍然是 undefined，就立刻彈出提示
-        if (typeof portableTextToHtml === 'undefined') {
-            alert('偵錯提示：PortableTextToHtml 函式庫載入失敗或未定義！請打開 F12 開發者工具，檢查「主控台(Console)」是否有其他紅色錯誤訊息。');
-        }
-        // ▲▲▲ 關鍵除錯碼 ▲▲▲
-
-        const SANITY_PROJECT_ID = '41rn0gbp'; 
-        const SANITY_DATASET = 'production';
-        const API_BASE_URL = `https://${SANITY_PROJECT_ID}.api.sanity.io/v2021-10-21/data/query/${SANITY_DATASET}`;
-        const container = document.getElementById('article-list-container');
-
-        async function fetchArticleList() {
-            // ... 此處及以下的所有程式碼都維持原樣，不需變動 ...
-            const template = document.getElementById('article-card-template');
-            const listQuery = encodeURIComponent(`*[_type == "post"] | order(publishedAt desc) {title, "slug": slug.current, "imageUrl": mainImage.asset->url, publishedAt}`);
-            const listApiUrl = `${API_BASE_URL}?query=${listQuery}`;
+        try {
+            const response = await fetch(listApiUrl);
+            if (!response.ok) throw new Error('API 請求失敗');
+            const { result } = await response.json();
             
-            try {
-                const response = await fetch(listApiUrl);
-                if (!response.ok) throw new Error('API 請求失敗');
-                const { result } = await response.json();
-                
-                container.innerHTML = ''; 
-                
-                if (!result || result.length === 0) {
-                    container.innerHTML = '<p>目前還沒有發布任何文章喔！</p>';
-                    return;
-                }
-
-                const fragment = document.createDocumentFragment();
-
-                result.forEach(post => {
-                    const cardClone = template.content.cloneNode(true);
-                    
-                    cardClone.querySelector('.mdui-card-primary-title').textContent = post.title;
-                    cardClone.querySelector('.mdui-card-primary-subtitle').textContent = new Date(post.publishedAt).toLocaleDateString();
-                    cardClone.querySelector('.article-card-media img').src = post.imageUrl || 'https://i.imgur.com/caN8z1z.png';
-                    
-                    const readButton = cardClone.querySelector('.mdui-card-actions button');
-                    readButton.addEventListener('click', () => {
-                        showFullPost(readButton, post.slug);
-                    });
-                    
-                    fragment.appendChild(cardClone);
-                });
-
-                container.appendChild(fragment);
-
-            } catch (error) {
-                console.error('獲取文章列表失敗:', error);
-                container.innerHTML = '<p class="mdui-text-color-red">讀取文章列表失敗，請檢查網路或 CORS 設定。</p>';
-            }
-        }
-
-        async function showFullPost(buttonElement, slug) {
-            if (!slug || typeof portableTextToHtml === 'undefined') {
-                mdui.alert('頁面關鍵元件載入失敗，這是一個意料之外的錯誤。', '錯誤');
+            container.innerHTML = ''; 
+            
+            if (!result || result.length === 0) {
+                container.innerHTML = '<p>目前還沒有發布任何文章喔！</p>';
                 return;
             }
 
-            const originalButtonText = buttonElement.innerHTML;
-            buttonElement.innerHTML = '<div class="mdui-spinner mdui-spinner-colorful" style="width: 24px; height: 24px;"></div>';
-            buttonElement.disabled = true;
+            const fragment = document.createDocumentFragment();
 
-            const postQuery = encodeURIComponent(`*[_type == "post" && slug.current == "${slug}"][0]{title, body, publishedAt, "authorName": author->name}`);
-            const postApiUrl = `${API_BASE_URL}?query=${postQuery}`;
-
-            try {
-                const response = await fetch(postApiUrl);
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error?.description || 'API 請求失敗');
-                }
-                const { result } = await response.json();
-                if (!result) throw new Error('在資料庫中找不到該篇文章 (slug: ' + slug + ')');
-
-                const contentHtml = result.body ? portableTextToHtml.toHtml(result.body) : '<p>沒有內文。</p>';
+            result.forEach(post => {
+                const cardClone = template.content.cloneNode(true);
+                cardClone.querySelector('.mdui-card-primary-title').textContent = post.title;
+                cardClone.querySelector('.mdui-card-primary-subtitle').textContent = new Date(post.publishedAt).toLocaleDateString();
+                cardClone.querySelector('.article-card-media img').src = post.imageUrl || 'https://i.imgur.com/caN8z1z.png';
                 
-                const postHtml = `
-                    <div class="mdui-typo dialog-post-content">
-                        <p class="mdui-text-color-theme-secondary">由 ${result.authorName || '匿名作者'} 發布於 ${new Date(result.publishedAt).toLocaleDateString()}</p>
-                        <div class="mdui-divider"></div>
-                        ${contentHtml}
-                    </div>`;
+                const readButton = cardClone.querySelector('.mdui-card-actions button');
+                readButton.addEventListener('click', () => {
+                    showFullPost(readButton, post.slug);
+                });
                 
-                mdui.dialog({
-                    title: result.title,
-                    content: postHtml,
-                    history: false,
-                    buttons: [{ text: '關閉' }]
-                });
-
-            } catch(error) {
-                console.error('獲取文章全文失敗:', error);
-                mdui.dialog({
-                    title: '讀取失敗',
-                    content: `<p class="mdui-text-color-red">抱歉，讀取文章時發生錯誤。</p><pre style="background-color:#eee;padding:8px;border-radius:4px;font-size:12px;white-space:pre-wrap;word-break:break-all;">${error.message}</pre>`,
-                    buttons: [{ text: '關閉' }]
-                });
-            } finally {
-                buttonElement.innerHTML = originalButtonText;
-                buttonElement.disabled = false;
-            }
+                fragment.appendChild(cardClone);
+            });
+            container.appendChild(fragment);
+        } catch (error) {
+            console.error('獲取文章列表失敗:', error);
+            container.innerHTML = '<p class="mdui-text-color-red">讀取文章列表失敗，請檢查網路或 CORS 設定。</p>';
         }
+    }
 
-        // 啟動主程式
-        fetchArticleList();
-    });
+    async function showFullPost(buttonElement, slug) {
+        const originalButtonText = buttonElement.innerHTML;
+        buttonElement.innerHTML = '<div class="mdui-spinner mdui-spinner-colorful" style="width: 24px; height: 24px;"></div>';
+        buttonElement.disabled = true;
+
+        const postQuery = encodeURIComponent(`*[_type == "post" && slug.current == "${slug}"][0]{title, body, publishedAt, "authorName": author->name}`);
+        const postApiUrl = `${API_BASE_URL}?query=${postQuery}`;
+
+        try {
+            const response = await fetch(postApiUrl);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error?.description || 'API 請求失敗');
+            }
+            const { result } = await response.json();
+            if (!result) throw new Error('在資料庫中找不到該篇文章 (slug: ' + slug + ')');
+
+            // 關鍵修改：直接使用導入的 toHtml 函式
+            const contentHtml = result.body ? toHtml(result.body) : '<p>沒有內文。</p>';
+            
+            const postHtml = `
+                <div class="mdui-typo dialog-post-content">
+                    <p class="mdui-text-color-theme-secondary">由 ${result.authorName || '匿名作者'} 發布於 ${new Date(result.publishedAt).toLocaleDateString()}</p>
+                    <div class="mdui-divider"></div>
+                    ${contentHtml}
+                </div>`;
+            
+            mdui.dialog({
+                title: result.title,
+                content: postHtml,
+                history: false,
+                buttons: [{ text: '關閉' }]
+            });
+        } catch(error) {
+            console.error('獲取文章全文失敗:', error);
+            mdui.dialog({
+                title: '讀取失敗',
+                content: `<p class="mdui-text-color-red">抱歉，讀取文章時發生錯誤。</p><pre>${error.message}</pre>`,
+                buttons: [{ text: '關閉' }]
+            });
+        } finally {
+            buttonElement.innerHTML = originalButtonText;
+            buttonElement.disabled = false;
+        }
+    }
+    // 啟動主程式
+    fetchArticleList();
 </script>
 </body>
 
 </html>
+
