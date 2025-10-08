@@ -100,12 +100,22 @@
         // 將變數宣告移到 load 事件內部，確保此時 window.PortableTextToHtml 肯定存在
         const portableTextToHtml = window.PortableTextToHtml;
 
+        // ▼▼▼ 關鍵除錯碼 ▼▼▼
+        // 在主控台印出 portableTextToHtml 的實際值
+        console.log('PortableTextToHtml library object:', portableTextToHtml);
+        // 如果此刻它仍然是 undefined，就立刻彈出提示
+        if (typeof portableTextToHtml === 'undefined') {
+            alert('偵錯提示：PortableTextToHtml 函式庫載入失敗或未定義！請打開 F12 開發者工具，檢查「主控台(Console)」是否有其他紅色錯誤訊息。');
+        }
+        // ▲▲▲ 關鍵除錯碼 ▲▲▲
+
         const SANITY_PROJECT_ID = '41rn0gbp'; 
         const SANITY_DATASET = 'production';
         const API_BASE_URL = `https://${SANITY_PROJECT_ID}.api.sanity.io/v2021-10-21/data/query/${SANITY_DATASET}`;
         const container = document.getElementById('article-list-container');
 
         async function fetchArticleList() {
+            // ... 此處及以下的所有程式碼都維持原樣，不需變動 ...
             const template = document.getElementById('article-card-template');
             const listQuery = encodeURIComponent(`*[_type == "post"] | order(publishedAt desc) {title, "slug": slug.current, "imageUrl": mainImage.asset->url, publishedAt}`);
             const listApiUrl = `${API_BASE_URL}?query=${listQuery}`;
@@ -148,7 +158,6 @@
         }
 
         async function showFullPost(buttonElement, slug) {
-            // 現在這個檢查可以 100% 確保 portableTextToHtml 存在
             if (!slug || typeof portableTextToHtml === 'undefined') {
                 mdui.alert('頁面關鍵元件載入失敗，這是一個意料之外的錯誤。', '錯誤');
                 return;
@@ -204,4 +213,5 @@
     });
 </script>
 </body>
+
 </html>
